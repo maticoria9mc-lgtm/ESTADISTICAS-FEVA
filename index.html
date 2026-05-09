@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCN | Gestión de Estadísticas Argentina</title>
+    <style>
+        :root {
+            --primary: #0f172a; 
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --success: #10b981;
+            --border: #e2e8f0;
+            --sidebar-width: 20%;
+        }
+
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; display: flex; min-height: 100vh; }
+        
+        /* Sidebar Fija */
+        .sidebar { width: var(--sidebar-width); background: var(--card-bg); box-shadow: 2px 0 10px rgba(0,0,0,0.05); padding: 25px; display: flex; flex-direction: column; gap: 20px; position: fixed; left: 0; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box; border-right: 1px solid var(--border); }
+        .sidebar h2 { font-size: 1.2rem; margin-top: 0; color: var(--primary); border-bottom: 2px solid var(--bg-color); padding-bottom: 10px; }
+        
+        .user-profile-header { background: var(--primary); color: white; padding: 15px; border-radius: 8px; margin-bottom: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .user-name { font-weight: 800; font-size: 1.1rem; margin: 4px 0; }
+        .user-role-badge { font-size: 0.7rem; font-weight: 700; padding: 3px 6px; border-radius: 4px; text-transform: uppercase; display: inline-block; }
+
+        .category-list { display: flex; flex-direction: column; gap: 8px; }
+        .chip { padding: 10px 15px; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border); cursor: pointer; font-size: 0.95rem; font-weight: 600; text-align: left; transition: all 0.2s; }
+        .chip:hover { background: #e2e8f0; }
+        .chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px; text-decoration: none;}
+        .btn-outline { background-color: white; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-outline:hover { background-color: #f8fafc; }
+        .btn-danger-outline { background-color: white; border: 1px solid #fecaca; color: #b91c1c; }
+        .btn-danger-outline:hover { background-color: #fee2e2; }
+
+        .sidebar-nav { display: flex; flex-direction: column; gap: 10px; margin-top: 5px; margin-bottom: 10px;}
+        .sidebar-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--border); padding-top: 15px; }
+
+        /* Contenido Principal */
+        .main-content { margin-left: var(--sidebar-width); width: calc(100% - var(--sidebar-width)); display: flex; flex-direction: column; }
+        .header { background-color: var(--primary); color: white; padding: 15px 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .header-logo-title-container { display: flex; align-items: center; gap: 15px; }
+        .header-logo { max-height: 50px; width: auto; }
+        .header h1 { margin: 0; font-size: 1.5rem; }
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+
+        .container { padding: 30px; max-width: 100%; box-sizing: border-box; }
+        .controls-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 15px 25px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 25px; gap: 15px; transition: opacity 0.3s; }
+        .filter-group { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        select { padding: 10px 15px; font-size: 1rem; border-radius: 6px; border: 1px solid var(--border); outline: none; cursor: pointer; min-width: 180px; }
+        
+        .right-controls { display: flex; align-items: center; gap: 15px; }
+        .toggle-group { display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
+        .toggle-group input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+        
+        #matchesContainer { display: flex; flex-direction: column; gap: 15px; }
+        
+        /* Cards y Semáforo de Prioridad */
+        .match-card { border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; display: flex; align-items: center; justify-content: space-between; border-left: 6px solid #cbd5e1; transition: transform 0.2s, background-color 0.3s; }
+        .match-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .match-card.priority-urgente { background-color: #fef2f2; border-left-color: #ef4444; }
+        .match-card.priority-importante { background-color: #fffbeb; border-left-color: #f59e0b; }
+        .match-card.priority-indefinido { background-color: #ffffff; border-left-color: #cbd5e1; }
+        .match-card.ready { border-left-color: var(--success) !important; background-color: #f0fdf4 !important; opacity: 0.8; }
+
+        /* Estilos para partidos que aún no se juegan */
+        .match-card.upcoming { background-color: #f1f5f9 !important; border-left-color: #94a3b8 !important; opacity: 0.8; }
+        .match-card.upcoming .match-teams { color: #64748b; }
+        .match-card.upcoming .match-number { color: #94a3b8; }
+        
+        /* Deshabilitar visualmente los botones de archivos en partidos próximos */
+        .match-card.upcoming .btn-p2, .match-card.upcoming .btn-scout, .match-card.upcoming .btn-video { 
+            background-color: #e2e8f0 !important; color: #94a3b8 !important; border-color: #cbd5e1 !important; 
+            cursor: not-allowed !important; pointer-events: none;
+        }
+
+        .match-info { flex: 1; }
+        .match-teams { font-size: 1.4rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 10px;}
+        .match-number { color: #64748b; font-size: 1.1rem; font-weight: 800; margin-right: 5px; }
+        .match-date { font-size: 0.85rem; color: #64748b; font-weight: 600; text-transform: uppercase; margin-right: 15px;}
+        
+        /* Botones de Edición Horizontales */
+        .btn-options-inline { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 4px; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-options-inline:hover { background: #e2e8f0; color: var(--primary); }
+        .btn-options-inline.delete-btn:hover { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+
+        .priority-selector { font-size: 0.8rem; font-weight: 800; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); outline: none; cursor: pointer; text-transform: uppercase; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 10px; width: 100%; text-align: center;}
+        .priority-selector.indefinido { background-color: #f8fafc; color: #64748b; }
+        .priority-selector.importante { background-color: #fef3c7; color: #b45309; border-color: #fde68a;}
+        .priority-selector.urgente { background-color: #fee2e2; color: #b91c1c; border-color: #fecaca;}
+
+        .stat-selector { padding: 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.85rem; background: #ffffff; color: var(--text-main); width: 150px; }
+        
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: white; }
+        .badge.wk1 { background-color: #3b82f6; } .badge.wk2 { background-color: #f59e0b; } .badge.wk3 { background-color: #8b5cf6; } .badge.final { background-color: #ef4444; } .badge.amistoso { background-color: #10b981; } .badge.default { background-color: #64748b; } 
+        
+        .match-status { display: flex; gap: 20px; flex: 1; justify-content: center; }
+        .status-item { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 0.85rem; font-weight: 500; color: #475569; }
+        .status-item input { transform: scale(1.2); cursor: pointer; }
+        
+        .match-actions { display: flex; flex-direction: column; gap: 8px; width: 280px; align-items: flex-end; }
+        .file-buttons { display: flex; gap: 8px; width: 100%; justify-content: space-between;}
+        
+        .btn-p2 { background-color: #e0f2fe; color: #0284c7; flex:1; padding: 6px 10px;} .btn-p2:hover { background-color: #bae6fd; }
+        .btn-scout { background-color: #ffedd5; color: #ea580c; flex:1; padding: 6px 10px;} .btn-scout:hover { background-color: #fed7aa; }
+        .btn-video { background-color: #faf5ff; color: #9333ea; border: 1px solid #e9d5ff; flex:1; padding: 6px 10px;} .btn-video:hover { background-color: #f3e8ff; }
+        
+        .btn-download { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; flex:1; padding: 6px;} .btn-download:hover { background-color: #bbf7d0; }
+        .btn-danger { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; padding: 6px; } .btn-danger:hover { background-color: #fecaca; }
+        
+        .empty-state { text-align: center; padding: 40px; color: #64748b; font-size: 1.1rem; }
+
+        /* Estilos de los Modales */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
+        .modal-overlay.show { display: flex; }
+        .modal-content { background: var(--card-bg); padding: 30px; border-radius: 10px; width: 100%; max-width: 500px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto;}
+        .modal-content h3 { margin-top: 0; color: var(--primary); margin-bottom: 20px; font-size: 1.4rem; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #475569; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; font-family: inherit; }
+        .form-row { display: flex; gap: 15px; }
+        .form-row .form-group { flex: 1; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="configSidebar">
+        <div class="user-profile-header">
+            <div style="font-size: 0.75rem; opacity: 0.8;">Sesión iniciada como</div>
+            <div class="user-name" id="displayUserName">Usuario</div>
+            <div class="user-role-badge" id="displayUserRole" style="background: rgba(255,255,255,0.2);">Desarrollador</div>
+        </div>
+
+        <div class="sidebar-nav">
+            <button id="btnPendingFilter" class="btn btn-outline" style="border-color: #eab308; color: #ca8a04;">📋 Mis Pendientes</button>
+            <a href="dashboard.html" class="btn" style="background: #3b82f6; color: white;">📊 Dashboard de Torneos</a>
+        </div>
+
+        <div>
+            <p style="margin-top: 5px; margin-bottom: 10px;"><strong>Categorías:</strong></p>
+            <div class="category-list" id="categoryList">
+                <div class="chip active" data-cat="Mayores">Mayores</div>
+                <div class="chip" data-cat="U23">U23</div>
+                <div class="chip" data-cat="U21">U21</div>
+                <div class="chip" data-cat="U19">U19</div>
+                <div class="chip" data-cat="U17">U17</div>
+            </div>
+        </div>
+        
+        <div class="sidebar-bottom">
+            <button id="btnDownloadTemplate" class="btn" style="background: #10b981; color: white; margin-bottom: 5px;">⬇️ Modelo Excel</button>
+            <button id="btnOpenSettings" class="btn btn-outline" style="border-color: #64748b; color: #475569; margin-bottom: 5px;">⚙️ Configuración</button>
+            <button id="btnLogout" class="btn btn-danger-outline">🚪 Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <div class="header-logo-title-container">
+                <img src="LOGO INFORMES 2-min.png" alt="Logo" class="header-logo">
+                <h1>Gestión de Estadísticas Argentina</h1>
+            </div>
+            
+            <div class="header-actions">
+                <button id="btnOpenAddMatch" class="btn" style="background-color: #3b82f6; color: white;">➕ Agregar Partido</button>
+                <input type="file" id="excelFileInput" accept=".xlsx, .xls" style="display: none;">
+                <button id="btnImportExcel" class="btn" style="background-color: #f8fafc; color: #0f172a;">📥 Importar Fixture</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="controls-bar" id="topControlsBar">
+                <div class="filter-group">
+                    <label for="tournamentFilter"><strong>Torneo:</strong></label>
+                    <select id="tournamentFilter"></select>
+                    <label for="countryFilter"><strong>País:</strong></label>
+                    <select id="countryFilter"></select>
+                </div>
+                
+                <div class="right-controls">
+                    <button id="btnDownloadAllScouts" class="btn btn-outline" style="border-color: #ea580c; color: #ea580c; padding: 6px 12px;">📦 Bajar Scouts del Torneo</button>
+                    <label class="toggle-group" style="border-left: 2px solid var(--border); padding-left: 15px;">
+                        <input type="checkbox" id="pendingToggle">
+                        Ocultar listos
+                    </label>
+                </div>
+            </div>
+
+            <h2 id="globalPendingTitle" style="display: none; color: var(--primary); margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: 10px;">📋 Tu Lista de Pendientes (Todas las Categorías)</h2>
+
+            <div id="matchesContainer"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="addMatchModal">
+        <div class="modal-content">
+            <h3>Agregar Partido</h3>
+            <div class="form-row">
+                <div class="form-group" style="flex: 0.5;"><label>Nº</label><input type="number" id="newMatchNumber" min="1"></div>
+                <div class="form-group" style="flex: 1.5;"><label>Categoría</label>
+                    <select id="newMatchCategory">
+                        <option value="Mayores">Mayores</option>
+                        <option value="U23">U23</option>
+                        <option value="U21">U21</option>
+                        <option value="U19">U19</option>
+                        <option value="U17">U17</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group"><label>Torneo</label><input type="text" id="newMatchTournament"></div>
+            <div class="form-group"><label>Fase</label><input type="text" id="newMatchPhase"></div>
+            <div class="form-row">
+                <div class="form-group"><label>Equipo 1</label><input type="text" id="newMatchTeamA" maxlength="3"></div>
+                <div class="form-group"><label>Equipo 2</label><input type="text" id="newMatchTeamB" maxlength="3"></div>
+            </div>
+            <div class="form-group"><label>Fecha</label><input type="date" id="newMatchDate"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="btnCancelMatch">Cancelar</button>
+                <button class="btn" id="btnSaveMatch" style="background: #10b981; color: white;">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="editMatchModal">
+        <div class="modal-content">
+            <h3>✏️ Editar Partido</h3>
+            <div class="form-row">
+                <div class="form-group" style="flex: 0.5;"><label>Nº</label><input type="number" id="editMatchNumber" min="1"></div>
+                <div class="form-group" style="flex: 1.5;"><label>Categoría</label>
+                    <select id="editMatchCategory">
+                        <option value="Mayores">Mayores</option>
+                        <option value="U23">U23</option>
+                        <option value="U21">U21</option>
+                        <option value="U19">U19</option>
+                        <option value="U17">U17</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group"><label>Torneo</label><input type="text" id="editMatchTournament"></div>
+            <div class="form-group"><label>Fase</label><input type="text" id="editMatchPhase"></div>
+            <div class="form-row">
+                <div class="form-group"><label>Equipo 1</label><input type="text" id="editMatchTeamA" maxlength="3"></div>
+                <div class="form-group"><label>Equipo 2</label><input type="text" id="editMatchTeamB" maxlength="3"></div>
+            </div>
+            <div class="form-group"><label>Fecha</label><input type="date" id="editMatchDate"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="btnCancelEdit">Cancelar</button>
+                <button class="btn" id="btnSaveEdit" style="background: #3b82f6; color: white;">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content" style="max-width: 550px;">
+            <h3>⚙️ Configuración del Sistema</h3>
+            
+            <div id="adminSettingsSection">
+                <h4 style="margin-top:0; color: var(--text-main); font-size: 1.1rem;">👥 Nombres para Asignar Partidos</h4>
+                <p style="font-size: 0.8rem; color: #64748b; margin-top: -5px; margin-bottom: 10px;">Esta lista aparecerá en el menú desplegable de cada partido.</p>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <input type="text" id="newStatName" placeholder="Ej: Adrián" style="flex: 1;">
+                    <button class="btn" id="btnSaveStat" style="background: #10b981; color: white;">Agregar Nombre</button>
+                </div>
+                <div id="statisticiansList" style="display: flex; flex-direction: column; gap: 8px; max-height: 120px; overflow-y: auto; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border);"></div>
+
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 25px 0 15px 0;">
+                
+                <h4 style="margin-top:0; color: var(--text-main); font-size: 1.1rem;">🔑 Permisos de Acceso al Sistema</h4>
+                <p style="font-size: 0.8rem; color: #64748b; margin-top: -5px; margin-bottom: 15px;">Ingresá el correo de un usuario registrado para darle permisos especiales.</p>
+                <div class="form-group" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <input type="email" id="newUserEmail" placeholder="correo@ejemplo.com" style="flex: 2;">
+                    <select id="newUserRole" style="flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 6px;">
+                        <option value="statistician">Estadístico</option>
+                        <option value="developer">Desarrollador</option>
+                    </select>
+                    <button class="btn" id="btnSaveUser" style="background: #3b82f6; color: white;">Asignar Permiso</button>
+                </div>
+                <div id="usersList" style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border);"></div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 30px;">
+                <button class="btn" id="btnCloseSettings" style="background: var(--primary); color: white;">Guardar y Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="videoModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 style="color: #9333ea;">🎬 Enlace de Video</h3>
+            <div class="form-group">
+                <label>Pegá el link de Google Drive (o YouTube):</label>
+                <input type="url" id="newVideoUrl" placeholder="https://drive.google.com/...">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="btnCancelVideo">Cancelar</button>
+                <button class="btn" id="btnSaveVideo" style="background: #9333ea; color: white;">Guardar Link</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="customAlertModal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h3 id="alertTitle" style="color: var(--primary); margin-bottom: 10px;">Atención</h3>
+            <p id="alertMessage" style="color: #475569; margin-bottom: 25px; line-height: 1.5;"></p>
+            <div class="modal-actions" style="justify-content: center; gap: 15px;">
+                <button class="btn btn-outline" id="btnAlertCancel">Cancelar</button>
+                <button class="btn" id="btnAlertConfirm" style="background: #3b82f6; color: white;">Aceptar</button>
+            </div>
+        </div>
+    </div>
+    <input type="file" id="fileUploadInput" style="display: none;">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
