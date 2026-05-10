@@ -67,12 +67,9 @@
         .match-card.priority-indefinido { background-color: #ffffff; border-left-color: #cbd5e1; }
         .match-card.ready { border-left-color: var(--success) !important; background-color: #f0fdf4 !important; opacity: 0.8; }
 
-        /* Estilos para partidos que aún no se juegan */
         .match-card.upcoming { background-color: #f1f5f9 !important; border-left-color: #94a3b8 !important; opacity: 0.8; }
         .match-card.upcoming .match-teams { color: #64748b; }
         .match-card.upcoming .match-number { color: #94a3b8; }
-        
-        /* Deshabilitar visualmente los botones de archivos en partidos próximos */
         .match-card.upcoming .btn-p2, .match-card.upcoming .btn-scout, .match-card.upcoming .btn-video { 
             background-color: #e2e8f0 !important; color: #94a3b8 !important; border-color: #cbd5e1 !important; 
             cursor: not-allowed !important; pointer-events: none;
@@ -83,7 +80,6 @@
         .match-number { color: #64748b; font-size: 1.1rem; font-weight: 800; margin-right: 5px; }
         .match-date { font-size: 0.85rem; color: #64748b; font-weight: 600; text-transform: uppercase; margin-right: 15px;}
         
-        /* Botones de Edición Horizontales */
         .btn-options-inline { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 4px; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 4px; }
         .btn-options-inline:hover { background: #e2e8f0; color: var(--primary); }
         .btn-options-inline.delete-btn:hover { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
@@ -94,6 +90,7 @@
         .priority-selector.urgente { background-color: #fee2e2; color: #b91c1c; border-color: #fecaca;}
 
         .stat-selector { padding: 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.85rem; background: #ffffff; color: var(--text-main); width: 150px; }
+        .stat-locked { font-size: 0.85rem; font-weight: 600; padding: 6px 10px; background: #f1f5f9; border: 1px solid var(--border); border-radius: 4px; color: var(--text-main); display: inline-block;}
         
         .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: white; }
         .badge.wk1 { background-color: #3b82f6; } .badge.wk2 { background-color: #f59e0b; } .badge.wk3 { background-color: #8b5cf6; } .badge.final { background-color: #ef4444; } .badge.amistoso { background-color: #10b981; } .badge.default { background-color: #64748b; } 
@@ -117,7 +114,7 @@
         /* Estilos de los Modales */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
         .modal-overlay.show { display: flex; }
-        .modal-content { background: var(--card-bg); padding: 30px; border-radius: 10px; width: 100%; max-width: 500px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto;}
+        .modal-content { background: var(--card-bg); padding: 30px; border-radius: 10px; width: 100%; max-width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto;}
         .modal-content h3 { margin-top: 0; color: var(--primary); margin-bottom: 20px; font-size: 1.4rem; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #475569; }
@@ -133,12 +130,12 @@
         <div class="user-profile-header">
             <div style="font-size: 0.75rem; opacity: 0.8;">Sesión iniciada como</div>
             <div class="user-name" id="displayUserName">Usuario</div>
-            <div class="user-role-badge" id="displayUserRole" style="background: rgba(255,255,255,0.2);">Desarrollador</div>
+            <div class="user-role-badge" id="displayUserRole" style="background: rgba(255,255,255,0.2);">Estadístico</div>
         </div>
 
         <div class="sidebar-nav">
             <button id="btnPendingFilter" class="btn btn-outline" style="border-color: #eab308; color: #ca8a04;">📋 Mis Pendientes</button>
-            <a href="dashboard.html" class="btn" style="background: #3b82f6; color: white;">📊 Dashboard de Torneos</a>
+            <a href="dashboard.html" id="btnDashboard" class="btn" style="background: #3b82f6; color: white; display: none;">📊 Dashboard de Torneos</a>
         </div>
 
         <div>
@@ -154,7 +151,7 @@
         
         <div class="sidebar-bottom">
             <button id="btnDownloadTemplate" class="btn" style="background: #10b981; color: white; margin-bottom: 5px;">⬇️ Modelo Excel</button>
-            <button id="btnOpenSettings" class="btn btn-outline" style="border-color: #64748b; color: #475569; margin-bottom: 5px;">⚙️ Configuración</button>
+            <button id="btnOpenSettings" class="btn btn-outline" style="border-color: #64748b; color: #475569; margin-bottom: 5px; display: none;">⚙️ Configuración</button>
             <button id="btnLogout" class="btn btn-danger-outline">🚪 Cerrar Sesión</button>
         </div>
     </div>
@@ -167,9 +164,9 @@
             </div>
             
             <div class="header-actions">
-                <button id="btnOpenAddMatch" class="btn" style="background-color: #3b82f6; color: white;">➕ Agregar Partido</button>
+                <button id="btnOpenAddMatch" class="btn" style="background-color: #3b82f6; color: white; display: none;">➕ Agregar Partido</button>
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls" style="display: none;">
-                <button id="btnImportExcel" class="btn" style="background-color: #f8fafc; color: #0f172a;">📥 Importar Fixture</button>
+                <button id="btnImportExcel" class="btn" style="background-color: #f8fafc; color: #0f172a; display: none;">📥 Importar Fixture</button>
             </div>
         </div>
 
@@ -256,35 +253,28 @@
     </div>
 
     <div class="modal-overlay" id="settingsModal">
-        <div class="modal-content" style="max-width: 550px;">
+        <div class="modal-content" style="max-width: 700px;">
             <h3>⚙️ Configuración del Sistema</h3>
             
             <div id="adminSettingsSection">
-                <h4 style="margin-top:0; color: var(--text-main); font-size: 1.1rem;">👥 Nombres para Asignar Partidos</h4>
-                <p style="font-size: 0.8rem; color: #64748b; margin-top: -5px; margin-bottom: 10px;">Esta lista aparecerá en el menú desplegable de cada partido.</p>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <input type="text" id="newStatName" placeholder="Ej: Adrián" style="flex: 1;">
-                    <button class="btn" id="btnSaveStat" style="background: #10b981; color: white;">Agregar Nombre</button>
-                </div>
-                <div id="statisticiansList" style="display: flex; flex-direction: column; gap: 8px; max-height: 120px; overflow-y: auto; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border);"></div>
-
-                <hr style="border: 0; border-top: 1px solid var(--border); margin: 25px 0 15px 0;">
+                <h4 style="margin-top:0; color: var(--text-main); font-size: 1.1rem;">👥 Gestión de Staff y Accesos</h4>
+                <p style="font-size: 0.8rem; color: #64748b; margin-top: -5px; margin-bottom: 15px;">Añadí al personal con su correo. El <strong>Nombre/Apodo</strong> será el que aparezca en los partidos.</p>
                 
-                <h4 style="margin-top:0; color: var(--text-main); font-size: 1.1rem;">🔑 Permisos de Acceso al Sistema</h4>
-                <p style="font-size: 0.8rem; color: #64748b; margin-top: -5px; margin-bottom: 15px;">Ingresá el correo de un usuario registrado para darle permisos especiales.</p>
-                <div class="form-group" style="display: flex; gap: 10px; margin-bottom: 10px;">
-                    <input type="email" id="newUserEmail" placeholder="correo@ejemplo.com" style="flex: 2;">
+                <div class="form-group" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <input type="text" id="newUserName" placeholder="Nombre (Ej: Adrián)" style="flex: 1; min-width: 120px;">
+                    <input type="email" id="newUserEmail" placeholder="correo@ejemplo.com" style="flex: 1.5; min-width: 180px;">
                     <select id="newUserRole" style="flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 6px;">
                         <option value="statistician">Estadístico</option>
                         <option value="developer">Desarrollador</option>
                     </select>
-                    <button class="btn" id="btnSaveUser" style="background: #3b82f6; color: white;">Asignar Permiso</button>
+                    <button class="btn" id="btnSaveUser" style="background: #3b82f6; color: white;">Guardar Usuario</button>
                 </div>
-                <div id="usersList" style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border);"></div>
+                
+                <div id="usersList" style="display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border);"></div>
             </div>
 
             <div class="modal-actions" style="margin-top: 30px;">
-                <button class="btn" id="btnCloseSettings" style="background: var(--primary); color: white;">Guardar y Cerrar</button>
+                <button class="btn" id="btnCloseSettings" style="background: var(--primary); color: white;">Cerrar Panel</button>
             </div>
         </div>
     </div>

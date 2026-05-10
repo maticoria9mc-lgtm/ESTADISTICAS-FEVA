@@ -1,6 +1,5 @@
 // --- IMPORTACIONES DE FIREBASE ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-// NUEVO: Agregamos getDoc y setDoc para leer/guardar los roles
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { getAuth, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
@@ -23,7 +22,6 @@ const auth = getAuth(app);
 const matchesCollection = collection(db, "matches"); 
 const usersCollection = collection(db, "users");
 
-let statisticians = ["Matías Coria", "Analista A", "Analista B"];
 let activeCategory = "Mayores"; 
 let showOnlyPending = false; 
 let allMatches = []; 
@@ -31,6 +29,7 @@ let currentEditMatchId = null;
 
 let currentUser = null;
 let currentRole = "statistician"; 
+let currentName = "Usuario"; 
 let unsubscribeSnapshot = null;
 let unsubscribeUsers = null;
 let allUsers = [];
@@ -41,32 +40,30 @@ setPersistence(auth, browserLocalPersistence)
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUser = user.email; 
-                document.getElementById('displayUserName').textContent = currentUser.split('@')[0];
                 
-                // TU CUENTA ES INAMOVIBLE (Super Administrador)
                 if(user.email === "maticoria9.mc@gmail.com") { 
                     currentRole = "developer";
+                    currentName = "Matías Coria";
                 } else {
-                    // Si es otro, le preguntamos a la base de datos qué rol tiene
                     try {
                         const userDoc = await getDoc(doc(db, "users", user.email));
                         if (userDoc.exists()) {
                             currentRole = userDoc.data().role || "statistician";
+                            currentName = userDoc.data().name || user.email.split('@')[0];
                         } else {
                             currentRole = "statistician";
+                            currentName = user.email.split('@')[0];
                         }
                     } catch (e) {
                         currentRole = "statistician";
+                        currentName = user.email.split('@')[0];
                     }
                 }
                 
+                document.getElementById('displayUserName').textContent = currentName;
                 applyRoleRestrictions();
                 iniciarEscuchadorBaseDatos();
-
-                // Si sos desarrollador, escuchamos la lista de usuarios para la configuración
-                if (currentRole === "developer") {
-                    iniciarEscuchadorUsuarios();
-                }
+                iniciarEscuchadorUsuarios();
             } else {
                 window.location.replace("login.html");
             }
@@ -77,7 +74,6 @@ setPersistence(auth, browserLocalPersistence)
     });
 
 
-// --- ESCUCHADORES DE BASE DE DATOS ---
 function iniciarEscuchadorBaseDatos() {
     if (unsubscribeSnapshot) unsubscribeSnapshot(); 
     unsubscribeSnapshot = onSnapshot(matchesCollection, (snapshot) => {
@@ -96,7 +92,8 @@ function iniciarEscuchadorUsuarios() {
         snapshot.forEach(doc => {
             allUsers.push({ email: doc.id, ...doc.data() });
         });
-        renderUsersManager();
+        if(currentRole === "developer") renderUsersManager();
+        applyFilters();
     });
 }
 
@@ -112,14 +109,12 @@ const globalPendingTitle = document.getElementById('globalPendingTitle');
 const displayUserRole = document.getElementById('displayUserRole');
 
 const btnOpenSettings = document.getElementById('btnOpenSettings');
+const btnDashboard = document.getElementById('btnDashboard'); 
 const settingsModal = document.getElementById('settingsModal');
 const btnCloseSettings = document.getElementById('btnCloseSettings');
 const adminSettingsSection = document.getElementById('adminSettingsSection');
 
-const btnSaveStat = document.getElementById('btnSaveStat');
-const newStatNameInput = document.getElementById('newStatName');
-
-// Referencias Nuevas (Gestión de Roles)
+const newUserName = document.getElementById('newUserName');
 const newUserEmail = document.getElementById('newUserEmail');
 const newUserRole = document.getElementById('newUserRole');
 const btnSaveUser = document.getElementById('btnSaveUser');
@@ -220,6 +215,10 @@ function applyRoleRestrictions() {
     const isAdmin = currentRole === "developer";
     displayUserRole.textContent = isAdmin ? "Desarrollador" : "Estadístico";
     displayUserRole.style.background = isAdmin ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.3)";
+    
+    btnDashboard.style.display = isAdmin ? 'inline-flex' : 'none';
+    btnOpenSettings.style.display = isAdmin ? 'inline-flex' : 'none';
+    
     if(isAdmin) {
         btnImportExcel.style.display = 'inline-flex';
         btnOpenAddMatch.style.display = 'inline-flex';
@@ -232,59 +231,33 @@ function applyRoleRestrictions() {
     applyFilters(); 
 }
 
-// --- GESTIÓN DE NOMBRES EN EL DESPLEGABLE ---
-function renderStatisticiansManager() {
-    const container = document.getElementById('statisticiansList');
-    container.innerHTML = statisticians.map((name, index) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; padding:6px 12px; border-radius:4px; border:1px solid #e2e8f0;">
-            <span style="font-size:0.9rem; font-weight: 500;">${name}</span>
-            <button onclick="removeStat(${index})" style="background:none; border:none; cursor:pointer; color: #b91c1c;" title="Eliminar">❌</button>
-        </div>
-    `).join('');
-}
-
-window.removeStat = (index) => {
-    statisticians.splice(index, 1);
-    renderStatisticiansManager();
-    applyFilters(); 
-};
-
-btnSaveStat.addEventListener('click', () => {
-    const name = newStatNameInput.value.trim();
-    if (name !== "") {
-        statisticians.push(name);
-        newStatNameInput.value = '';
-        renderStatisticiansManager();
-        applyFilters(); 
-    }
-});
-
-
-// --- GESTIÓN DE PERMISOS DE USUARIOS (NUEVO) ---
 function renderUsersManager() {
     if (!usersList) return;
     
-    // Matías siempre aparece como Intocable en la UI
     let html = `
         <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; padding:6px 12px; border-radius:4px; border:1px solid #e2e8f0;">
             <div>
-                <span style="font-size:0.9rem; font-weight: 700;">maticoria9.mc@gmail.com</span> 
-                <span style="font-size:0.7rem; background:#10b981; color:white; padding:2px 4px; border-radius:4px; margin-left:5px;">Admin Fijo</span>
+                <span style="font-size:0.9rem; font-weight: 700;">Matías Coria</span> 
+                <div style="font-size:0.75rem; color:#64748b;">maticoria9.mc@gmail.com</div>
             </div>
+            <span style="font-size:0.7rem; background:#10b981; color:white; padding:2px 4px; border-radius:4px; margin-left:5px;">Admin Fijo</span>
         </div>
     `;
     
     html += allUsers.map((u) => {
-        if(u.email === "maticoria9.mc@gmail.com") return ''; // Ya lo mostramos fijo arriba
+        if(u.email === "maticoria9.mc@gmail.com") return ''; 
         return `
         <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; padding:6px 12px; border-radius:4px; border:1px solid #e2e8f0;">
             <div>
-                <span style="font-size:0.9rem; font-weight: 500;">${u.email}</span>
-                <span style="font-size:0.7rem; background:${u.role === 'developer' ? '#3b82f6' : '#64748b'}; color:white; padding:2px 4px; border-radius:4px; margin-left:5px;">
+                <span style="font-size:0.9rem; font-weight: 700;">${u.name || 'Sin Apodo'}</span>
+                <div style="font-size:0.75rem; color:#64748b;">${u.email}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap: 10px;">
+                <span style="font-size:0.7rem; background:${u.role === 'developer' ? '#3b82f6' : '#64748b'}; color:white; padding:2px 4px; border-radius:4px;">
                     ${u.role === 'developer' ? 'Desarrollador' : 'Estadístico'}
                 </span>
+                <button onclick="removeUserAccess('${u.email}')" style="background:none; border:none; cursor:pointer; color: #b91c1c;" title="Eliminar Usuario">❌</button>
             </div>
-            <button onclick="removeUserAccess('${u.email}')" style="background:none; border:none; cursor:pointer; color: #b91c1c;" title="Eliminar Permisos Especiales">❌</button>
         </div>
     `}).join('');
     
@@ -292,36 +265,36 @@ function renderUsersManager() {
 }
 
 window.removeUserAccess = async (email) => {
-    showCustomAlert("Quitar Permisos", `¿Seguro que querés quitarle los permisos a ${email}? Pasará a ser un Estadístico básico.`, true, async () => {
+    showCustomAlert("Eliminar Usuario", `¿Seguro que querés quitar a ${email} del staff?`, true, async () => {
         try {
             await deleteDoc(doc(db, "users", email));
-            showCustomAlert("Éxito", "Permisos revocados correctamente.");
+            showCustomAlert("Éxito", "Usuario eliminado correctamente.");
         } catch (error) {
-            showCustomAlert("Error", "No se pudo eliminar el acceso.");
+            showCustomAlert("Error", "No se pudo eliminar al usuario.");
         }
     });
 };
 
 btnSaveUser.addEventListener('click', async () => {
+    const name = newUserName.value.trim();
     const email = newUserEmail.value.trim().toLowerCase();
     const role = newUserRole.value;
     
-    if (email !== "" && email.includes("@")) {
+    if (email !== "" && email.includes("@") && name !== "") {
         try {
-            await setDoc(doc(db, "users", email), { role: role });
+            await setDoc(doc(db, "users", email), { role: role, name: name });
+            newUserName.value = '';
             newUserEmail.value = '';
-            showCustomAlert("¡Éxito!", `Permisos de ${role === 'developer' ? 'Desarrollador' : 'Estadístico'} guardados para ${email}.`);
+            showCustomAlert("¡Éxito!", `Se guardó a ${name} en el sistema.`);
         } catch (error) {
-            showCustomAlert("Error", "No se pudieron guardar los permisos en la base de datos.");
+            showCustomAlert("Error", "No se pudieron guardar los datos.");
         }
     } else {
-        showCustomAlert("Atención", "Por favor ingresá un correo electrónico válido.");
+        showCustomAlert("Atención", "Por favor ingresá un nombre y correo electrónico válidos.");
     }
 });
 
 
-
-// --- LÓGICA MODAL AGREGAR PARTIDO ---
 btnOpenAddMatch.addEventListener('click', () => {
     document.getElementById('newMatchCategory').value = activeCategory;
     addMatchModal.classList.add('show');
@@ -425,6 +398,11 @@ function renderMatches(matches) {
     }
     
     matches.sort((a, b) => b.createdAt - a.createdAt);
+    
+    let dynamicStatisticians = ["Matías Coria"];
+    allUsers.forEach(u => {
+        if(u.name && u.email !== "maticoria9.mc@gmail.com") dynamicStatisticians.push(u.name);
+    });
 
     matches.forEach(match => {
         let isEnabled = true;
@@ -433,13 +411,10 @@ function renderMatches(matches) {
             const matchDateObj = new Date(parts[2], parts[1]-1, parts[0]); 
             const now = new Date();
             const twelveHours = 12 * 60 * 60 * 1000;
-            
             if (now.getTime() < (matchDateObj.getTime() - twelveHours)) {
                 isEnabled = false;
             }
         }
-
-        const statOptions = statisticians.map(s => `<option value="${s}" ${match.assignedStat === s ? 'selected' : ''}>${s}</option>`).join('');
         
         const card = document.createElement('div');
         card.className = `match-card priority-${match.priority.toLowerCase()} ${match.ready ? 'ready' : ''} ${!isEnabled ? 'upcoming' : ''}`;
@@ -465,6 +440,38 @@ function renderMatches(matches) {
             </div>
         ` : '';
 
+        // --- LÓGICA DE AUTO-ASIGNACIÓN ---
+        let analystHTML = '';
+        if (currentRole === "developer") {
+            const statOptions = dynamicStatisticians.map(s => `<option value="${s}" ${match.assignedStat === s ? 'selected' : ''}>${s}</option>`).join('');
+            analystHTML = `<select class="stat-selector" data-id="${match.id}" title="Asignar Estadístico">
+                              <option value="">👤 Sin asignar</option>
+                              ${statOptions}
+                           </select>`;
+        } else {
+            // Si el partido no tiene a nadie asignado, le damos el botón para que lo tome
+            if (!match.assignedStat || match.assignedStat.trim() === "") {
+                analystHTML = `<button class="btn-outline btn-self-assign" data-id="${match.id}" style="padding: 4px 10px; font-size: 0.75rem; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 4px; font-weight: 700; cursor: pointer; background: #eff6ff;">✋ Asignarme</button>`;
+            } else {
+                analystHTML = `<div class="stat-locked">👤 ${match.assignedStat}</div>`;
+            }
+        }
+
+        let priorityHTML = '';
+        if (currentRole === "developer") {
+            priorityHTML = `
+                <select class="priority-selector ${match.priority.toLowerCase()}" data-id="${match.id}">
+                    <option value="INDEFINIDO" ${match.priority === 'INDEFINIDO' ? 'selected' : ''}>⚪ INDEFINIDO</option>
+                    <option value="IMPORTANTE" ${match.priority === 'IMPORTANTE' ? 'selected' : ''}>🟡 IMPORTANTE</option>
+                    <option value="URGENTE" ${match.priority === 'URGENTE' ? 'selected' : ''}>🔴 URGENTE</option>
+                </select>
+            `;
+        } else {
+             priorityHTML = `<div class="priority-selector ${match.priority.toLowerCase()}" style="cursor:default;">
+                 ${match.priority === 'INDEFINIDO' ? '⚪ INDEFINIDO' : (match.priority === 'IMPORTANTE' ? '🟡 IMPORTANTE' : '🔴 URGENTE')}
+             </div>`;
+        }
+
         card.innerHTML = `
             <div class="match-info">
                 ${editDeleteHTML}
@@ -473,13 +480,10 @@ function renderMatches(matches) {
                     ${match.teamA} vs ${match.teamB} 
                     <span class="${getBadgeClass(match.phase)}">${match.phase}</span>
                 </div>
-                <div style="display:flex; align-items:center; margin-top:8px;">
+                <div style="display:flex; align-items:center; margin-top:8px; gap: 10px;">
                     ${categoryLabel}
                     <div class="match-date">📅 ${match.date}</div>
-                    <select class="stat-selector" data-id="${match.id}" title="Asignar Estadístico">
-                        <option value="">👤 Sin asignar</option>
-                        ${statOptions}
-                    </select>
+                    ${analystHTML}
                 </div>
             </div>
             
@@ -490,11 +494,7 @@ function renderMatches(matches) {
             </div>
             
             <div class="match-actions">
-                <select class="priority-selector ${match.priority.toLowerCase()}" data-id="${match.id}">
-                    <option value="INDEFINIDO" ${match.priority === 'INDEFINIDO' ? 'selected' : ''}>⚪ INDEFINIDO</option>
-                    <option value="IMPORTANTE" ${match.priority === 'IMPORTANTE' ? 'selected' : ''}>🟡 IMPORTANTE</option>
-                    <option value="URGENTE" ${match.priority === 'URGENTE' ? 'selected' : ''}>🔴 URGENTE</option>
-                </select>
+                ${priorityHTML}
                 <div class="file-buttons">
                     ${btnP2HTML}
                     ${btnScoutHTML}
@@ -509,8 +509,7 @@ function renderMatches(matches) {
 function applyFilters() {
     let filteredMatches = [];
     if (showOnlyPending) {
-        const currentName = currentUser.split('@')[0];
-        filteredMatches = allMatches.filter(match => match.ready === false && (match.assignedStat === currentUser || match.assignedStat === currentName));
+        filteredMatches = allMatches.filter(match => match.ready === false && match.assignedStat === currentName);
     } else {
         let matchesInCategory = allMatches.filter(match => match.category === activeCategory);
         updateDropdowns(matchesInCategory);
@@ -526,6 +525,22 @@ function applyFilters() {
 
 matchesContainer.addEventListener('click', async (e) => {
     const btn = e.target;
+    
+    // --- LÓGICA DEL BOTÓN AUTO-ASIGNARSE ---
+    if (btn.classList.contains('btn-self-assign') || btn.closest('.btn-self-assign')) {
+        const targetBtn = btn.classList.contains('btn-self-assign') ? btn : btn.closest('.btn-self-assign');
+        const matchId = targetBtn.getAttribute('data-id');
+        
+        showCustomAlert("Tomar Partido", `¿Querés auto-asignarte este partido? Quedará bajo tu nombre (${currentName}).`, true, async () => {
+            try { 
+                await updateDoc(doc(db, "matches", matchId), { assignedStat: currentName }); 
+            } catch (error) {
+                showCustomAlert("Error", "Hubo un problema al asignar el partido.");
+            }
+        });
+        return; // Cortamos acá para que no siga buscando otros botones
+    }
+
     if (btn.classList.contains('edit-btn')) {
         const matchId = btn.getAttribute('data-id');
         const matchToEdit = allMatches.find(m => m.id === matchId);
@@ -677,5 +692,3 @@ excelFileInput.addEventListener('change', (e) => {
     };
     reader.readAsArrayBuffer(e.target.files[0]);
 });
-
-renderStatisticiansManager();
