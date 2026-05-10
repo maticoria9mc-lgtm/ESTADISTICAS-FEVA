@@ -2,7 +2,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
-import { getAuth, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+// NUEVO: Importamos herramientas para la re-autenticación por seguridad
+import { getAuth, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
 // --- CONFIGURACIÓN FIREBASE ---
 const firebaseConfig = {
@@ -33,6 +34,9 @@ let currentName = "Usuario";
 let unsubscribeSnapshot = null;
 let unsubscribeUsers = null;
 let allUsers = [];
+
+let currentCalDate = new Date(); 
+let selectedFilterDate = null; 
 
 // --- CONTROL DE SESIÓN Y ROLES DINÁMICOS ---
 setPersistence(auth, browserLocalPersistence)
@@ -81,6 +85,7 @@ function iniciarEscuchadorBaseDatos() {
         snapshot.forEach((documento) => {
             allMatches.push({ id: documento.id, ...documento.data() });
         });
+        renderCalendar(); 
         applyFilters();
     });
 }
@@ -101,7 +106,6 @@ const matchesContainer = document.getElementById('matchesContainer');
 const tournamentFilter = document.getElementById('tournamentFilter');
 const countryFilter = document.getElementById('countryFilter');
 
-// Referencias Nuevas para Filtrado y Orden
 const statusFilter = document.getElementById('statusFilter');
 const sortFilter = document.getElementById('sortFilter');
 
@@ -141,6 +145,14 @@ const btnCancelVideo = document.getElementById('btnCancelVideo');
 const btnSaveVideo = document.getElementById('btnSaveVideo');
 const fileUploadInput = document.getElementById('fileUploadInput');
 
+// Nuevas referencias para Eliminar Torneo
+const btnOpenDeleteTournament = document.getElementById('btnOpenDeleteTournament');
+const deleteTournamentModal = document.getElementById('deleteTournamentModal');
+const btnCancelDeleteTournament = document.getElementById('btnCancelDeleteTournament');
+const btnConfirmDeleteTournament = document.getElementById('btnConfirmDeleteTournament');
+const deleteTournamentSelect = document.getElementById('deleteTournamentSelect');
+const deleteTournamentPassword = document.getElementById('deleteTournamentPassword');
+
 let currentUploadMatchId = null;
 let currentUploadType = null; 
 let currentVideoMatchId = null;
@@ -178,7 +190,11 @@ categoryList.addEventListener('click', (e) => {
         if (showOnlyPending) togglePendingMode();
         document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
         e.target.classList.add('active');
+        activeCategory = e.target.getAttribute('data-cat'); 
+        
         tournamentFilter.value = "TODOS";
+        selectedFilterDate = null; 
+        renderCalendar();
         applyFilters(); 
     }
 });
@@ -213,6 +229,90 @@ btnLogout.addEventListener('click', () => {
 
 btnOpenSettings.addEventListener('click', () => settingsModal.classList.add('show'));
 btnCloseSettings.addEventListener('click', () => settingsModal.classList.remove('show'));
+
+// --- LÓGICA DE ELIMINAR TORNEO COMPLETO ---
+if (btnOpenDeleteTournament) {
+    btnOpenDeleteTournament.addEventListener('click', () => {
+        // Llenamos el menú con los torneos que existen en la base
+        const tournaments = new Set(allMatches.map(m => m.tournament));
+        const sortedTournaments = Array.from(tournaments).sort();
+        
+        deleteTournamentSelect.innerHTML = '';
+        sortedTournaments.forEach(t => {
+            if(!t) return;
+            const option = document.createElement('option'); 
+            option.value = t; 
+            option.textContent = t.replace(/_/g, ' '); 
+            deleteTournamentSelect.appendChild(option);
+        });
+
+        if (sortedTournaments.length === 0) {
+            deleteTournamentSelect.innerHTML = '<option value="">No hay torneos registrados</option>';
+            btnConfirmDeleteTournament.disabled = true;
+        } else {
+            btnConfirmDeleteTournament.disabled = false;
+        }
+
+        deleteTournamentPassword.value = '';
+        deleteTournamentModal.classList.add('show');
+    });
+}
+
+if (btnCancelDeleteTournament) {
+    btnCancelDeleteTournament.addEventListener('click', () => {
+        deleteTournamentModal.classList.remove('show');
+    });
+}
+
+if (btnConfirmDeleteTournament) {
+    btnConfirmDeleteTournament.addEventListener('click', async () => {
+        const selectedTournament = deleteTournamentSelect.value;
+        const password = deleteTournamentPassword.value;
+
+        if (!selectedTournament || password === "") {
+            showCustomAlert("Atención", "Seleccioná un torneo y poné tu contraseña para continuar.");
+            return;
+        }
+
+        const user = auth.currentUser;
+        if (user) {
+            // Preparamos la llave de seguridad con la clave que pusiste
+            const credential = EmailAuthProvider.credential(user.email, password);
+            try {
+                btnConfirmDeleteTournament.textContent = "Verificando...";
+                btnConfirmDeleteTournament.disabled = true;
+                
+                // Le pedimos a Firebase que re-verifique tu identidad
+                await reauthenticateWithCredential(user, credential);
+                
+                // Si la clave es correcta, buscamos todos los partidos de ese torneo
+                const matchesToDelete = allMatches.filter(m => m.tournament === selectedTournament);
+                
+                deleteTournamentModal.classList.remove('show');
+                
+                // Mostramos un cartel de carga para que no se asuste si tarda
+                showCustomAlert("Eliminando...", `Borrando ${matchesToDelete.length} partidos. Por favor esperá, no cierres la ventana.`);
+                document.getElementById('btnAlertCancel').style.display = 'none';
+                document.getElementById('btnAlertConfirm').style.display = 'none';
+
+                // Disparamos un loop que borra los partidos uno por uno en la nube
+                for (const match of matchesToDelete) {
+                    await deleteDoc(doc(db, "matches", match.id));
+                }
+
+                customAlertModal.classList.remove('show');
+                showCustomAlert("¡Éxito!", `El torneo ${selectedTournament.replace(/_/g, ' ')} y todos sus partidos fueron eliminados por completo.`);
+                
+            } catch (error) {
+                console.error("Error de reautenticación:", error);
+                showCustomAlert("Error de Seguridad", "La contraseña es incorrecta o hubo un problema de conexión con Firebase.");
+            } finally {
+                btnConfirmDeleteTournament.textContent = "Eliminar Definitivamente";
+                btnConfirmDeleteTournament.disabled = false;
+            }
+        }
+    });
+}
 
 function applyRoleRestrictions() {
     const isAdmin = currentRole === "developer";
@@ -345,6 +445,67 @@ btnSaveEdit.addEventListener('click', async () => {
     }
 });
 
+function renderCalendar() {
+    const year = currentCalDate.getFullYear();
+    const month = currentCalDate.getMonth();
+    
+    const options = { month: 'long', year: 'numeric' };
+    let title = new Intl.DateTimeFormat('es-ES', options).format(currentCalDate);
+    document.getElementById('monthYearDisplay').textContent = title;
+    
+    const firstDay = new Date(year, month, 1).getDay(); 
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const grid = document.getElementById('calendarDays');
+    let html = '<div class="day-name">Do</div><div class="day-name">Lu</div><div class="day-name">Ma</div><div class="day-name">Mi</div><div class="day-name">Ju</div><div class="day-name">Vi</div><div class="day-name">Sa</div>';
+    
+    const matchDates = new Set(
+        allMatches.filter(m => m.category === activeCategory && m.date && m.date !== "Sin fecha")
+                  .map(m => {
+                      const p = m.date.split('-');
+                      if (p[0].length === 4) return `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`; 
+                      return m.date;
+                  })
+    );
+    
+    for(let i=0; i<firstDay; i++) {
+        html += '<div class="cal-day empty"></div>';
+    }
+    
+    for(let i=1; i<=daysInMonth; i++) {
+        const dateStr = `${String(i).padStart(2, '0')}-${String(month + 1).padStart(2, '0')}-${year}`;
+        const hasMatch = matchDates.has(dateStr);
+        const isActive = selectedFilterDate === dateStr;
+        
+        html += `<div class="cal-day ${hasMatch ? 'has-match' : ''} ${isActive ? 'active' : ''}" data-date="${dateStr}">${i}</div>`;
+    }
+    grid.innerHTML = html;
+    
+    document.getElementById('clearDateFilter').style.display = selectedFilterDate ? 'block' : 'none';
+}
+
+document.getElementById('prevMonth').addEventListener('click', () => { currentCalDate.setMonth(currentCalDate.getMonth() - 1); renderCalendar(); });
+document.getElementById('nextMonth').addEventListener('click', () => { currentCalDate.setMonth(currentCalDate.getMonth() + 1); renderCalendar(); });
+
+document.getElementById('calendarDays').addEventListener('click', (e) => {
+    if(e.target.classList.contains('cal-day') && !e.target.classList.contains('empty')) {
+        const clickedDate = e.target.getAttribute('data-date');
+        if(selectedFilterDate === clickedDate) {
+            selectedFilterDate = null;
+        } else {
+            selectedFilterDate = clickedDate;
+        }
+        renderCalendar();
+        applyFilters();
+    }
+});
+
+document.getElementById('clearDateFilter').addEventListener('click', () => {
+    selectedFilterDate = null;
+    renderCalendar();
+    applyFilters();
+});
+
 function updateDropdowns(matchesInCategory) {
     const currentTourneySelection = tournamentFilter.value;
     const currentCountrySelection = countryFilter.value;
@@ -409,7 +570,11 @@ function renderMatches(matches) {
         let isEnabled = true;
         if (match.date && match.date !== "Sin fecha") {
             const parts = match.date.split('-');
-            const matchDateObj = new Date(parts[2], parts[1]-1, parts[0]); 
+            let year, month, day;
+            if (parts[0].length === 4) { year = parts[0]; month = parts[1]; day = parts[2]; } 
+            else { day = parts[0]; month = parts[1]; year = parts[2]; }
+            
+            const matchDateObj = new Date(year, month - 1, day); 
             const now = new Date();
             const twelveHours = 12 * 60 * 60 * 1000;
             if (now.getTime() < (matchDateObj.getTime() - twelveHours)) {
@@ -470,6 +635,12 @@ function renderMatches(matches) {
                  ${match.priority === 'INDEFINIDO' ? '⚪ INDEFINIDO' : (match.priority === 'IMPORTANTE' ? '🟡 IMPORTANTE' : '🔴 URGENTE')}
              </div>`;
         }
+        
+        let displayDate = match.date;
+        if (displayDate && displayDate !== "Sin fecha") {
+            const dp = displayDate.split('-');
+            if (dp[0].length === 4) displayDate = `${dp[2]}-${dp[1]}-${dp[0]}`;
+        }
 
         card.innerHTML = `
             <div class="match-info">
@@ -481,7 +652,7 @@ function renderMatches(matches) {
                 </div>
                 <div style="display:flex; align-items:center; margin-top:8px; gap: 10px;">
                     ${categoryLabel}
-                    <div class="match-date">📅 ${match.date}</div>
+                    <div class="match-date">📅 ${displayDate}</div>
                     ${analystHTML}
                 </div>
             </div>
@@ -505,11 +676,16 @@ function renderMatches(matches) {
     });
 }
 
-// FUNCIONES DE APOYO PARA ORDENAR
 function parseDateForSort(dateStr) {
     if (!dateStr || dateStr === "Sin fecha") return "99999999"; 
     const parts = dateStr.split('-');
-    if (parts.length === 3) return `${parts[2]}${parts[1]}${parts[0]}`; 
+    if (parts.length === 3) {
+        if (parts[0].length === 4) {
+            return `${parts[0]}${parts[1].padStart(2,'0')}${parts[2].padStart(2,'0')}`;
+        } else {
+            return `${parts[2]}${parts[1].padStart(2,'0')}${parts[0].padStart(2,'0')}`;
+        }
+    }
     return "99999999";
 }
 
@@ -535,14 +711,20 @@ function applyFilters() {
         if (selectedTournament !== "TODOS") filteredMatches = filteredMatches.filter(match => match.tournament === selectedTournament);
         if (selectedCountry !== "TODOS") filteredMatches = filteredMatches.filter(match => match.teamA === selectedCountry || match.teamB === selectedCountry);
         
-        // APLICAR FILTRO DE ESTADO
         if (statusMode === "PENDIENTES") filteredMatches = filteredMatches.filter(match => match.ready === false);
         if (statusMode === "LISTOS") filteredMatches = filteredMatches.filter(match => match.ready === true);
     }
-
-    // APLICAR ORDENAMIENTO
-    const sortValue = sortFilter ? sortFilter.value : "NUM_ASC";
     
+    if (selectedFilterDate) {
+        filteredMatches = filteredMatches.filter(match => {
+            let matchDateStr = match.date;
+            const p = matchDateStr.split('-');
+            if(p[0].length === 4) matchDateStr = `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`;
+            return matchDateStr === selectedFilterDate;
+        });
+    }
+
+    const sortValue = sortFilter ? sortFilter.value : "NUM_ASC";
     filteredMatches.sort((a, b) => {
         if (sortValue === "FECHA_ASC" || sortValue === "FECHA_DESC") {
             const dateA = parseDateForSort(a.date);
@@ -553,14 +735,13 @@ function applyFilters() {
             const numB = parseNumForSort(b.matchNumber);
             return sortValue === "NUM_ASC" ? numA - numB : numB - numA;
         } else {
-            return b.createdAt - a.createdAt; // Agregados recientemente
+            return b.createdAt - a.createdAt; 
         }
     });
 
     renderMatches(filteredMatches);
 }
 
-// NUEVOS EVENTOS DE LOS FILTROS
 statusFilter.addEventListener('change', applyFilters);
 sortFilter.addEventListener('change', applyFilters);
 
@@ -592,10 +773,14 @@ matchesContainer.addEventListener('click', async (e) => {
             document.getElementById('editMatchPhase').value = matchToEdit.phase;
             document.getElementById('editMatchTeamA').value = matchToEdit.teamA;
             document.getElementById('editMatchTeamB').value = matchToEdit.teamB;
+            
             let formatedDate = "";
             if(matchToEdit.date && matchToEdit.date !== "Sin fecha") {
                 const parts = matchToEdit.date.split('-');
-                if(parts.length === 3) formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                if(parts.length === 3) {
+                    if (parts[0].length === 4) formatedDate = matchToEdit.date;
+                    else formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
             }
             document.getElementById('editMatchDate').value = formatedDate;
             editMatchModal.classList.add('show');
@@ -708,11 +893,25 @@ excelFileInput.addEventListener('change', (e) => {
         try {
             for (let i = 4; i < rows.length; i++) {
                 if (!rows[i] || !rows[i][0] || !rows[i][3]) continue;
+                
                 let fecha = String(rows[i][0]).trim();
-                if (!isNaN(fecha) && fecha !== "") {
+                
+                if (/^\d+$/.test(fecha)) {
                     const dateObj = XLSX.SSF.parse_date_code(Number(fecha));
                     fecha = `${String(dateObj.d).padStart(2, '0')}-${String(dateObj.m).padStart(2, '0')}-${dateObj.y}`;
+                } 
+                else if (fecha.includes('-') || fecha.includes('/')) {
+                    const clean = fecha.replace(/\//g, '-');
+                    const p = clean.split('-');
+                    if(p.length === 3) {
+                        if(p[0].length === 4) { 
+                            fecha = `${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}-${p[0]}`;
+                        } else {
+                            fecha = `${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}-${p[2]}`;
+                        }
+                    }
                 }
+                
                 const newMatch = {
                     category: categoria || activeCategory, 
                     tournament: torneo, 
