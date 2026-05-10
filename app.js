@@ -100,7 +100,11 @@ function iniciarEscuchadorUsuarios() {
 const matchesContainer = document.getElementById('matchesContainer');
 const tournamentFilter = document.getElementById('tournamentFilter');
 const countryFilter = document.getElementById('countryFilter');
-const pendingToggle = document.getElementById('pendingToggle');
+
+// Referencias Nuevas para Filtrado y Orden
+const statusFilter = document.getElementById('statusFilter');
+const sortFilter = document.getElementById('sortFilter');
+
 const categoryList = document.getElementById('categoryList');
 const btnPendingFilter = document.getElementById('btnPendingFilter');
 const btnLogout = document.getElementById('btnLogout');
@@ -174,7 +178,6 @@ categoryList.addEventListener('click', (e) => {
         if (showOnlyPending) togglePendingMode();
         document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
         e.target.classList.add('active');
-        activeCategory = e.target.getAttribute('data-cat');
         tournamentFilter.value = "TODOS";
         applyFilters(); 
     }
@@ -397,8 +400,6 @@ function renderMatches(matches) {
         return;
     }
     
-    matches.sort((a, b) => b.createdAt - a.createdAt);
-    
     let dynamicStatisticians = ["Matías Coria"];
     allUsers.forEach(u => {
         if(u.name && u.email !== "maticoria9.mc@gmail.com") dynamicStatisticians.push(u.name);
@@ -440,7 +441,6 @@ function renderMatches(matches) {
             </div>
         ` : '';
 
-        // --- LÓGICA DE AUTO-ASIGNACIÓN ---
         let analystHTML = '';
         if (currentRole === "developer") {
             const statOptions = dynamicStatisticians.map(s => `<option value="${s}" ${match.assignedStat === s ? 'selected' : ''}>${s}</option>`).join('');
@@ -449,7 +449,6 @@ function renderMatches(matches) {
                               ${statOptions}
                            </select>`;
         } else {
-            // Si el partido no tiene a nadie asignado, le damos el botón para que lo tome
             if (!match.assignedStat || match.assignedStat.trim() === "") {
                 analystHTML = `<button class="btn-outline btn-self-assign" data-id="${match.id}" style="padding: 4px 10px; font-size: 0.75rem; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 4px; font-weight: 700; cursor: pointer; background: #eff6ff;">✋ Asignarme</button>`;
             } else {
@@ -506,6 +505,20 @@ function renderMatches(matches) {
     });
 }
 
+// FUNCIONES DE APOYO PARA ORDENAR
+function parseDateForSort(dateStr) {
+    if (!dateStr || dateStr === "Sin fecha") return "99999999"; 
+    const parts = dateStr.split('-');
+    if (parts.length === 3) return `${parts[2]}${parts[1]}${parts[0]}`; 
+    return "99999999";
+}
+
+function parseNumForSort(numStr) {
+    if(!numStr || numStr === "S/N") return 9999;
+    const num = parseInt(numStr);
+    return isNaN(num) ? 9999 : num; 
+}
+
 function applyFilters() {
     let filteredMatches = [];
     if (showOnlyPending) {
@@ -514,19 +527,46 @@ function applyFilters() {
         let matchesInCategory = allMatches.filter(match => match.category === activeCategory);
         updateDropdowns(matchesInCategory);
         filteredMatches = matchesInCategory;
+        
         const selectedTournament = tournamentFilter.value;
         const selectedCountry = countryFilter.value;
+        const statusMode = statusFilter.value;
+        
         if (selectedTournament !== "TODOS") filteredMatches = filteredMatches.filter(match => match.tournament === selectedTournament);
         if (selectedCountry !== "TODOS") filteredMatches = filteredMatches.filter(match => match.teamA === selectedCountry || match.teamB === selectedCountry);
-        if (pendingToggle.checked) filteredMatches = filteredMatches.filter(match => match.ready === false);
+        
+        // APLICAR FILTRO DE ESTADO
+        if (statusMode === "PENDIENTES") filteredMatches = filteredMatches.filter(match => match.ready === false);
+        if (statusMode === "LISTOS") filteredMatches = filteredMatches.filter(match => match.ready === true);
     }
+
+    // APLICAR ORDENAMIENTO
+    const sortValue = sortFilter ? sortFilter.value : "NUM_ASC";
+    
+    filteredMatches.sort((a, b) => {
+        if (sortValue === "FECHA_ASC" || sortValue === "FECHA_DESC") {
+            const dateA = parseDateForSort(a.date);
+            const dateB = parseDateForSort(b.date);
+            return sortValue === "FECHA_ASC" ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+        } else if (sortValue === "NUM_ASC" || sortValue === "NUM_DESC") {
+            const numA = parseNumForSort(a.matchNumber);
+            const numB = parseNumForSort(b.matchNumber);
+            return sortValue === "NUM_ASC" ? numA - numB : numB - numA;
+        } else {
+            return b.createdAt - a.createdAt; // Agregados recientemente
+        }
+    });
+
     renderMatches(filteredMatches);
 }
+
+// NUEVOS EVENTOS DE LOS FILTROS
+statusFilter.addEventListener('change', applyFilters);
+sortFilter.addEventListener('change', applyFilters);
 
 matchesContainer.addEventListener('click', async (e) => {
     const btn = e.target;
     
-    // --- LÓGICA DEL BOTÓN AUTO-ASIGNARSE ---
     if (btn.classList.contains('btn-self-assign') || btn.closest('.btn-self-assign')) {
         const targetBtn = btn.classList.contains('btn-self-assign') ? btn : btn.closest('.btn-self-assign');
         const matchId = targetBtn.getAttribute('data-id');
@@ -538,7 +578,7 @@ matchesContainer.addEventListener('click', async (e) => {
                 showCustomAlert("Error", "Hubo un problema al asignar el partido.");
             }
         });
-        return; // Cortamos acá para que no siga buscando otros botones
+        return; 
     }
 
     if (btn.classList.contains('edit-btn')) {
@@ -646,7 +686,6 @@ btnSaveVideo.addEventListener('click', async () => {
 
 tournamentFilter.addEventListener('change', applyFilters);
 countryFilter.addEventListener('change', applyFilters);
-pendingToggle.addEventListener('change', applyFilters);
 
 btnDownloadTemplate.addEventListener('click', () => {
     const ws_data = [ ["TORNEO", "VNL 26"], ["CATEGORIA", activeCategory], [], ["FECHA", "Fase", "N° Partido", "Equipo 1", "Equipo 2"] ];
