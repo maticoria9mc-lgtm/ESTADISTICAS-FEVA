@@ -2,7 +2,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
-// NUEVO: Importamos herramientas para la re-autenticación por seguridad
 import { getAuth, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
 // --- CONFIGURACIÓN FIREBASE ---
@@ -145,7 +144,6 @@ const btnCancelVideo = document.getElementById('btnCancelVideo');
 const btnSaveVideo = document.getElementById('btnSaveVideo');
 const fileUploadInput = document.getElementById('fileUploadInput');
 
-// Nuevas referencias para Eliminar Torneo
 const btnOpenDeleteTournament = document.getElementById('btnOpenDeleteTournament');
 const deleteTournamentModal = document.getElementById('deleteTournamentModal');
 const btnCancelDeleteTournament = document.getElementById('btnCancelDeleteTournament');
@@ -165,6 +163,10 @@ const btnAlertConfirm = document.getElementById('btnAlertConfirm');
 function showCustomAlert(title, message, isConfirm = false, onConfirm = null) {
     document.getElementById('alertTitle').textContent = title;
     document.getElementById('alertMessage').textContent = message;
+    
+    // CORRECCIÓN: Siempre nos aseguramos de que el botón de Aceptar/Confirmar vuelva a aparecer
+    btnAlertConfirm.style.display = 'inline-flex';
+    
     if (isConfirm) {
         btnAlertCancel.style.display = 'inline-flex';
         btnAlertConfirm.textContent = 'Confirmar';
@@ -233,7 +235,6 @@ btnCloseSettings.addEventListener('click', () => settingsModal.classList.remove(
 // --- LÓGICA DE ELIMINAR TORNEO COMPLETO ---
 if (btnOpenDeleteTournament) {
     btnOpenDeleteTournament.addEventListener('click', () => {
-        // Llenamos el menú con los torneos que existen en la base
         const tournaments = new Set(allMatches.map(m => m.tournament));
         const sortedTournaments = Array.from(tournaments).sort();
         
@@ -276,26 +277,19 @@ if (btnConfirmDeleteTournament) {
 
         const user = auth.currentUser;
         if (user) {
-            // Preparamos la llave de seguridad con la clave que pusiste
             const credential = EmailAuthProvider.credential(user.email, password);
             try {
                 btnConfirmDeleteTournament.textContent = "Verificando...";
                 btnConfirmDeleteTournament.disabled = true;
                 
-                // Le pedimos a Firebase que re-verifique tu identidad
                 await reauthenticateWithCredential(user, credential);
-                
-                // Si la clave es correcta, buscamos todos los partidos de ese torneo
                 const matchesToDelete = allMatches.filter(m => m.tournament === selectedTournament);
-                
                 deleteTournamentModal.classList.remove('show');
                 
-                // Mostramos un cartel de carga para que no se asuste si tarda
                 showCustomAlert("Eliminando...", `Borrando ${matchesToDelete.length} partidos. Por favor esperá, no cierres la ventana.`);
                 document.getElementById('btnAlertCancel').style.display = 'none';
                 document.getElementById('btnAlertConfirm').style.display = 'none';
 
-                // Disparamos un loop que borra los partidos uno por uno en la nube
                 for (const match of matchesToDelete) {
                     await deleteDoc(doc(db, "matches", match.id));
                 }
@@ -461,11 +455,7 @@ function renderCalendar() {
     
     const matchDates = new Set(
         allMatches.filter(m => m.category === activeCategory && m.date && m.date !== "Sin fecha")
-                  .map(m => {
-                      const p = m.date.split('-');
-                      if (p[0].length === 4) return `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`; 
-                      return m.date;
-                  })
+                  .map(m => m.date)
     );
     
     for(let i=0; i<firstDay; i++) {
@@ -570,11 +560,7 @@ function renderMatches(matches) {
         let isEnabled = true;
         if (match.date && match.date !== "Sin fecha") {
             const parts = match.date.split('-');
-            let year, month, day;
-            if (parts[0].length === 4) { year = parts[0]; month = parts[1]; day = parts[2]; } 
-            else { day = parts[0]; month = parts[1]; year = parts[2]; }
-            
-            const matchDateObj = new Date(year, month - 1, day); 
+            const matchDateObj = new Date(parts[2], parts[1]-1, parts[0]); 
             const now = new Date();
             const twelveHours = 12 * 60 * 60 * 1000;
             if (now.getTime() < (matchDateObj.getTime() - twelveHours)) {
@@ -636,12 +622,6 @@ function renderMatches(matches) {
              </div>`;
         }
         
-        let displayDate = match.date;
-        if (displayDate && displayDate !== "Sin fecha") {
-            const dp = displayDate.split('-');
-            if (dp[0].length === 4) displayDate = `${dp[2]}-${dp[1]}-${dp[0]}`;
-        }
-
         card.innerHTML = `
             <div class="match-info">
                 ${editDeleteHTML}
@@ -652,7 +632,7 @@ function renderMatches(matches) {
                 </div>
                 <div style="display:flex; align-items:center; margin-top:8px; gap: 10px;">
                     ${categoryLabel}
-                    <div class="match-date">📅 ${displayDate}</div>
+                    <div class="match-date">📅 ${match.date}</div>
                     ${analystHTML}
                 </div>
             </div>
@@ -680,11 +660,7 @@ function parseDateForSort(dateStr) {
     if (!dateStr || dateStr === "Sin fecha") return "99999999"; 
     const parts = dateStr.split('-');
     if (parts.length === 3) {
-        if (parts[0].length === 4) {
-            return `${parts[0]}${parts[1].padStart(2,'0')}${parts[2].padStart(2,'0')}`;
-        } else {
-            return `${parts[2]}${parts[1].padStart(2,'0')}${parts[0].padStart(2,'0')}`;
-        }
+        return `${parts[2]}${parts[1]}${parts[0]}`;
     }
     return "99999999";
 }
@@ -716,12 +692,7 @@ function applyFilters() {
     }
     
     if (selectedFilterDate) {
-        filteredMatches = filteredMatches.filter(match => {
-            let matchDateStr = match.date;
-            const p = matchDateStr.split('-');
-            if(p[0].length === 4) matchDateStr = `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`;
-            return matchDateStr === selectedFilterDate;
-        });
+        filteredMatches = filteredMatches.filter(match => match.date === selectedFilterDate);
     }
 
     const sortValue = sortFilter ? sortFilter.value : "NUM_ASC";
@@ -777,10 +748,7 @@ matchesContainer.addEventListener('click', async (e) => {
             let formatedDate = "";
             if(matchToEdit.date && matchToEdit.date !== "Sin fecha") {
                 const parts = matchToEdit.date.split('-');
-                if(parts.length === 3) {
-                    if (parts[0].length === 4) formatedDate = matchToEdit.date;
-                    else formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
+                if(parts.length === 3) formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
             }
             document.getElementById('editMatchDate').value = formatedDate;
             editMatchModal.classList.add('show');
@@ -879,6 +847,7 @@ btnDownloadTemplate.addEventListener('click', () => {
     XLSX.writeFile(wb, "MCN_Modelo_Fixture.xlsx");
 });
 
+// --- EL ÚNICO LECTOR DE EXCEL QUE TE VA A SALVAR LA VIDA ---
 btnImportExcel.addEventListener('click', () => excelFileInput.click());
 excelFileInput.addEventListener('change', (e) => {
     if (e.target.id !== "excelFileInput") return; 
@@ -886,29 +855,34 @@ excelFileInput.addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = async function(event) {
         const data = new Uint8Array(event.target.result);
-        const rows = XLSX.utils.sheet_to_json(XLSX.read(data, { type: 'array' }).Sheets[XLSX.read(data, { type: 'array' }).SheetNames[0]], { header: 1, defval: "" }); 
+        
+        // MAGIA ABSOLUTA: 'raw: false' ignora las fechas ocultas de Excel y lee TEXTO PURO.
+        const rows = XLSX.utils.sheet_to_json(XLSX.read(data, { type: 'array' }).Sheets[XLSX.read(data, { type: 'array' }).SheetNames[0]], { header: 1, defval: "", raw: false }); 
+        
         if (rows.length < 5) return;
         const torneo = String(rows[0][1] || '').trim();
         const categoria = (String(rows[1][1] || '').trim().toLowerCase() === 'mayores') ? 'Mayores' : String(rows[1][1] || '').trim().toUpperCase();
+        
         try {
             for (let i = 4; i < rows.length; i++) {
                 if (!rows[i] || !rows[i][0] || !rows[i][3]) continue;
                 
                 let fecha = String(rows[i][0]).trim();
                 
-                if (/^\d+$/.test(fecha)) {
-                    const dateObj = XLSX.SSF.parse_date_code(Number(fecha));
-                    fecha = `${String(dateObj.d).padStart(2, '0')}-${String(dateObj.m).padStart(2, '0')}-${dateObj.y}`;
-                } 
-                else if (fecha.includes('-') || fecha.includes('/')) {
-                    const clean = fecha.replace(/\//g, '-');
-                    const p = clean.split('-');
-                    if(p.length === 3) {
-                        if(p[0].length === 4) { 
-                            fecha = `${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}-${p[0]}`;
-                        } else {
-                            fecha = `${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}-${p[2]}`;
-                        }
+                // Sanitizador universal para asegurar formato DD-MM-YYYY
+                fecha = fecha.replace(/\//g, '-'); 
+                const p = fecha.split('-');
+                
+                if(p.length === 3) {
+                    if(p[0].length === 4) { 
+                        // Si Excel vomitó YYYY-MM-DD
+                        fecha = `${p[2].padStart(2, '0')}-${p[1].padStart(2, '0')}-${p[0]}`;
+                    } else if (p[2].length === 2) {
+                        // Si vino DD-MM-YY (ej: 26)
+                        fecha = `${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}-20${p[2]}`;
+                    } else {
+                        // Formato perfecto DD-MM-YYYY
+                        fecha = `${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}-${p[2]}`;
                     }
                 }
                 
@@ -929,4 +903,5 @@ excelFileInput.addEventListener('change', (e) => {
         } catch (error) {}
     };
     reader.readAsArrayBuffer(e.target.files[0]);
+    excelFileInput.value = '';
 });
