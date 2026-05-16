@@ -316,13 +316,14 @@ function applyRoleRestrictions() {
     btnDashboard.style.display = isAdmin ? 'inline-flex' : 'none';
     btnOpenSettings.style.display = isAdmin ? 'inline-flex' : 'none';
     
+    // --- MAGIA ACÁ: ESTE BOTÓN AHORA ES VISIBLE PARA TODOS ---
+    btnOpenAddMatch.style.display = 'inline-flex';
+    
     if(isAdmin) {
         btnImportExcel.style.display = 'inline-flex';
-        btnOpenAddMatch.style.display = 'inline-flex';
         adminSettingsSection.style.display = 'block';
     } else {
         btnImportExcel.style.display = 'none';
-        btnOpenAddMatch.style.display = 'none';
         adminSettingsSection.style.display = 'none';
     }
     applyFilters(); 
@@ -455,7 +456,11 @@ function renderCalendar() {
     
     const matchDates = new Set(
         allMatches.filter(m => m.category === activeCategory && m.date && m.date !== "Sin fecha")
-                  .map(m => m.date)
+                  .map(m => {
+                      const p = m.date.split('-');
+                      if (p[0].length === 4) return `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`; 
+                      return m.date;
+                  })
     );
     
     for(let i=0; i<firstDay; i++) {
@@ -560,7 +565,11 @@ function renderMatches(matches) {
         let isEnabled = true;
         if (match.date && match.date !== "Sin fecha") {
             const parts = match.date.split('-');
-            const matchDateObj = new Date(parts[2], parts[1]-1, parts[0]); 
+            let year, month, day;
+            if (parts[0].length === 4) { year = parts[0]; month = parts[1]; day = parts[2]; } 
+            else { day = parts[0]; month = parts[1]; year = parts[2]; }
+            
+            const matchDateObj = new Date(year, month - 1, day); 
             const now = new Date();
             const twelveHours = 12 * 60 * 60 * 1000;
             if (now.getTime() < (matchDateObj.getTime() - twelveHours)) {
@@ -622,6 +631,12 @@ function renderMatches(matches) {
              </div>`;
         }
         
+        let displayDate = match.date;
+        if (displayDate && displayDate !== "Sin fecha") {
+            const dp = displayDate.split('-');
+            if (dp[0].length === 4) displayDate = `${dp[2]}-${dp[1]}-${dp[0]}`;
+        }
+
         card.innerHTML = `
             <div class="match-info">
                 ${editDeleteHTML}
@@ -632,7 +647,7 @@ function renderMatches(matches) {
                 </div>
                 <div style="display:flex; align-items:center; margin-top:8px; gap: 10px;">
                     ${categoryLabel}
-                    <div class="match-date">📅 ${match.date}</div>
+                    <div class="match-date">📅 ${displayDate}</div>
                     ${analystHTML}
                 </div>
             </div>
@@ -660,7 +675,11 @@ function parseDateForSort(dateStr) {
     if (!dateStr || dateStr === "Sin fecha") return "99999999"; 
     const parts = dateStr.split('-');
     if (parts.length === 3) {
-        return `${parts[2]}${parts[1]}${parts[0]}`;
+        if (parts[0].length === 4) {
+            return `${parts[0]}${parts[1].padStart(2,'0')}${parts[2].padStart(2,'0')}`;
+        } else {
+            return `${parts[2]}${parts[1].padStart(2,'0')}${parts[0].padStart(2,'0')}`;
+        }
     }
     return "99999999";
 }
@@ -692,7 +711,12 @@ function applyFilters() {
     }
     
     if (selectedFilterDate) {
-        filteredMatches = filteredMatches.filter(match => match.date === selectedFilterDate);
+        filteredMatches = filteredMatches.filter(match => {
+            let matchDateStr = match.date;
+            const p = matchDateStr.split('-');
+            if(p[0].length === 4) matchDateStr = `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`;
+            return matchDateStr === selectedFilterDate;
+        });
     }
 
     const sortValue = sortFilter ? sortFilter.value : "NUM_ASC";
@@ -748,7 +772,10 @@ matchesContainer.addEventListener('click', async (e) => {
             let formatedDate = "";
             if(matchToEdit.date && matchToEdit.date !== "Sin fecha") {
                 const parts = matchToEdit.date.split('-');
-                if(parts.length === 3) formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                if(parts.length === 3) {
+                    if (parts[0].length === 4) formatedDate = matchToEdit.date;
+                    else formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
             }
             document.getElementById('editMatchDate').value = formatedDate;
             editMatchModal.classList.add('show');
