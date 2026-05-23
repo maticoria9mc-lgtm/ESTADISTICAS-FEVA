@@ -231,7 +231,6 @@ btnLogout.addEventListener('click', () => {
 btnOpenSettings.addEventListener('click', () => settingsModal.classList.add('show'));
 btnCloseSettings.addEventListener('click', () => settingsModal.classList.remove('show'));
 
-// --- LÓGICA DE ELIMINAR TORNEO COMPLETO ---
 if (btnOpenDeleteTournament) {
     btnOpenDeleteTournament.addEventListener('click', () => {
         const tournaments = new Set(allMatches.map(m => m.tournament));
@@ -453,7 +452,11 @@ function renderCalendar() {
     
     const matchDates = new Set(
         allMatches.filter(m => m.category === activeCategory && m.date && m.date !== "Sin fecha")
-                  .map(m => m.date)
+                  .map(m => {
+                      const p = m.date.split('-');
+                      if (p[0].length === 4) return `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`; 
+                      return m.date;
+                  })
     );
     
     for(let i=0; i<firstDay; i++) {
@@ -549,7 +552,7 @@ function renderMatches(matches) {
         return;
     }
     
-    matches.sort((a, b) => b.createdAt - a.createdAt);
+    // --- LÍNEA BORRADA: Acá ya NO forzamos el orden por fecha de creación ---
     
     let dynamicStatisticians = ["Matías Coria"];
     allUsers.forEach(u => {
@@ -560,7 +563,11 @@ function renderMatches(matches) {
         let isEnabled = true;
         if (match.date && match.date !== "Sin fecha") {
             const parts = match.date.split('-');
-            const matchDateObj = new Date(parts[2], parts[1]-1, parts[0]); 
+            let year, month, day;
+            if (parts[0].length === 4) { year = parts[0]; month = parts[1]; day = parts[2]; } 
+            else { day = parts[0]; month = parts[1]; year = parts[2]; }
+            
+            const matchDateObj = new Date(year, month - 1, day); 
             const now = new Date();
             const twelveHours = 12 * 60 * 60 * 1000;
             if (now.getTime() < (matchDateObj.getTime() - twelveHours)) {
@@ -638,7 +645,7 @@ function renderMatches(matches) {
                 </div>
                 <div style="display:flex; align-items:center; margin-top:8px; gap: 10px;">
                     ${categoryLabel}
-                    <div class="match-date">📅 ${match.date}</div>
+                    <div class="match-date">📅 ${displayDate}</div>
                     ${analystHTML}
                 </div>
             </div>
@@ -666,7 +673,11 @@ function parseDateForSort(dateStr) {
     if (!dateStr || dateStr === "Sin fecha") return "99999999"; 
     const parts = dateStr.split('-');
     if (parts.length === 3) {
-        return `${parts[2]}${parts[1]}${parts[0]}`;
+        if (parts[0].length === 4) {
+            return `${parts[0]}${parts[1].padStart(2,'0')}${parts[2].padStart(2,'0')}`;
+        } else {
+            return `${parts[2]}${parts[1].padStart(2,'0')}${parts[0].padStart(2,'0')}`;
+        }
     }
     return "99999999";
 }
@@ -698,7 +709,12 @@ function applyFilters() {
     }
     
     if (selectedFilterDate) {
-        filteredMatches = filteredMatches.filter(match => match.date === selectedFilterDate);
+        filteredMatches = filteredMatches.filter(match => {
+            let matchDateStr = match.date;
+            const p = matchDateStr.split('-');
+            if(p[0].length === 4) matchDateStr = `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`;
+            return matchDateStr === selectedFilterDate;
+        });
     }
 
     const sortValue = sortFilter ? sortFilter.value : "NUM_ASC";
@@ -754,7 +770,10 @@ matchesContainer.addEventListener('click', async (e) => {
             let formatedDate = "";
             if(matchToEdit.date && matchToEdit.date !== "Sin fecha") {
                 const parts = matchToEdit.date.split('-');
-                if(parts.length === 3) formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                if(parts.length === 3) {
+                    if (parts[0].length === 4) formatedDate = matchToEdit.date;
+                    else formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
             }
             document.getElementById('editMatchDate').value = formatedDate;
             editMatchModal.classList.add('show');
@@ -784,7 +803,6 @@ matchesContainer.addEventListener('click', async (e) => {
         videoModal.classList.add('show');
     }
     
-    // --- NUEVO: MODIFICACIÓN CON SEGURIDAD PARA REEMPLAZAR/ELIMINAR ARCHIVOS ---
     if (btn.classList.contains('btn-replace-p2') || btn.closest('.btn-replace-p2')) {
         const targetBtn = btn.classList.contains('btn-replace-p2') ? btn : btn.closest('.btn-replace-p2');
         const matchId = targetBtn.getAttribute('data-id');
@@ -870,13 +888,21 @@ tournamentFilter.addEventListener('change', applyFilters);
 countryFilter.addEventListener('change', applyFilters);
 
 btnDownloadTemplate.addEventListener('click', () => {
-    const ws_data = [ ["TORNEO", "VNL 26"], ["CATEGORIA", activeCategory], [], ["FECHA", "Fase", "N° Partido", "Equipo 1", "Equipo 2"] ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ws_data), "Fixture");
-    XLSX.writeFile(wb, "MCN_Modelo_Fixture.xlsx");
+    try {
+        if (typeof window.XLSX === 'undefined') {
+            showCustomAlert("Error de Conexión", "El navegador bloqueó la librería de Excel. Por favor, recargá la página (Ctrl + F5).");
+            return;
+        }
+        const ws_data = [ ["TORNEO", "VNL 26"], ["CATEGORIA", activeCategory], [], ["FECHA", "Fase", "N° Partido", "Equipo 1", "Equipo 2"] ];
+        const wb = window.XLSX.utils.book_new();
+        window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(ws_data), "Fixture");
+        window.XLSX.writeFile(wb, `MCN_Modelo_${activeCategory}.xlsx`);
+    } catch (error) {
+        console.error("Error al descargar Excel:", error);
+        showCustomAlert("Error", "Hubo un problema al generar el archivo. Por favor, recargá la página.");
+    }
 });
 
-// --- EL ÚNICO LECTOR DE EXCEL QUE TE VA A SALVAR LA VIDA ---
 btnImportExcel.addEventListener('click', () => excelFileInput.click());
 excelFileInput.addEventListener('change', (e) => {
     if (e.target.id !== "excelFileInput") return; 
@@ -884,10 +910,13 @@ excelFileInput.addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = async function(event) {
         const data = new Uint8Array(event.target.result);
+        
         const rows = XLSX.utils.sheet_to_json(XLSX.read(data, { type: 'array' }).Sheets[XLSX.read(data, { type: 'array' }).SheetNames[0]], { header: 1, defval: "", raw: false }); 
+        
         if (rows.length < 5) return;
         const torneo = String(rows[0][1] || '').trim();
         const categoria = (String(rows[1][1] || '').trim().toLowerCase() === 'mayores') ? 'Mayores' : String(rows[1][1] || '').trim().toUpperCase();
+        
         try {
             for (let i = 4; i < rows.length; i++) {
                 if (!rows[i] || !rows[i][0] || !rows[i][3]) continue;
