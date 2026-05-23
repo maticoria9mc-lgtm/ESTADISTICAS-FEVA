@@ -164,7 +164,6 @@ function showCustomAlert(title, message, isConfirm = false, onConfirm = null) {
     document.getElementById('alertTitle').textContent = title;
     document.getElementById('alertMessage').textContent = message;
     
-    // CORRECCIÓN: Siempre nos aseguramos de que el botón de Aceptar/Confirmar vuelva a aparecer
     btnAlertConfirm.style.display = 'inline-flex';
     
     if (isConfirm) {
@@ -315,8 +314,6 @@ function applyRoleRestrictions() {
     
     btnDashboard.style.display = isAdmin ? 'inline-flex' : 'none';
     btnOpenSettings.style.display = isAdmin ? 'inline-flex' : 'none';
-    
-    // --- MAGIA ACÁ: ESTE BOTÓN AHORA ES VISIBLE PARA TODOS ---
     btnOpenAddMatch.style.display = 'inline-flex';
     
     if(isAdmin) {
@@ -397,7 +394,7 @@ btnOpenAddMatch.addEventListener('click', () => {
     document.getElementById('newMatchCategory').value = activeCategory;
     addMatchModal.classList.add('show');
 });
-btnCancelMatch.addEventListener('click', () => addMatchModal.classList.remove('show'));
+document.getElementById('btnCancelMatch').addEventListener('click', () => addMatchModal.classList.remove('show'));
 
 btnSaveMatch.addEventListener('click', async () => {
     addMatchModal.classList.remove('show'); 
@@ -456,11 +453,7 @@ function renderCalendar() {
     
     const matchDates = new Set(
         allMatches.filter(m => m.category === activeCategory && m.date && m.date !== "Sin fecha")
-                  .map(m => {
-                      const p = m.date.split('-');
-                      if (p[0].length === 4) return `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`; 
-                      return m.date;
-                  })
+                  .map(m => m.date)
     );
     
     for(let i=0; i<firstDay; i++) {
@@ -556,6 +549,8 @@ function renderMatches(matches) {
         return;
     }
     
+    matches.sort((a, b) => b.createdAt - a.createdAt);
+    
     let dynamicStatisticians = ["Matías Coria"];
     allUsers.forEach(u => {
         if(u.name && u.email !== "maticoria9.mc@gmail.com") dynamicStatisticians.push(u.name);
@@ -565,11 +560,7 @@ function renderMatches(matches) {
         let isEnabled = true;
         if (match.date && match.date !== "Sin fecha") {
             const parts = match.date.split('-');
-            let year, month, day;
-            if (parts[0].length === 4) { year = parts[0]; month = parts[1]; day = parts[2]; } 
-            else { day = parts[0]; month = parts[1]; year = parts[2]; }
-            
-            const matchDateObj = new Date(year, month - 1, day); 
+            const matchDateObj = new Date(parts[2], parts[1]-1, parts[0]); 
             const now = new Date();
             const twelveHours = 12 * 60 * 60 * 1000;
             if (now.getTime() < (matchDateObj.getTime() - twelveHours)) {
@@ -647,7 +638,7 @@ function renderMatches(matches) {
                 </div>
                 <div style="display:flex; align-items:center; margin-top:8px; gap: 10px;">
                     ${categoryLabel}
-                    <div class="match-date">📅 ${displayDate}</div>
+                    <div class="match-date">📅 ${match.date}</div>
                     ${analystHTML}
                 </div>
             </div>
@@ -675,11 +666,7 @@ function parseDateForSort(dateStr) {
     if (!dateStr || dateStr === "Sin fecha") return "99999999"; 
     const parts = dateStr.split('-');
     if (parts.length === 3) {
-        if (parts[0].length === 4) {
-            return `${parts[0]}${parts[1].padStart(2,'0')}${parts[2].padStart(2,'0')}`;
-        } else {
-            return `${parts[2]}${parts[1].padStart(2,'0')}${parts[0].padStart(2,'0')}`;
-        }
+        return `${parts[2]}${parts[1]}${parts[0]}`;
     }
     return "99999999";
 }
@@ -711,12 +698,7 @@ function applyFilters() {
     }
     
     if (selectedFilterDate) {
-        filteredMatches = filteredMatches.filter(match => {
-            let matchDateStr = match.date;
-            const p = matchDateStr.split('-');
-            if(p[0].length === 4) matchDateStr = `${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}-${p[0]}`;
-            return matchDateStr === selectedFilterDate;
-        });
+        filteredMatches = filteredMatches.filter(match => match.date === selectedFilterDate);
     }
 
     const sortValue = sortFilter ? sortFilter.value : "NUM_ASC";
@@ -772,10 +754,7 @@ matchesContainer.addEventListener('click', async (e) => {
             let formatedDate = "";
             if(matchToEdit.date && matchToEdit.date !== "Sin fecha") {
                 const parts = matchToEdit.date.split('-');
-                if(parts.length === 3) {
-                    if (parts[0].length === 4) formatedDate = matchToEdit.date;
-                    else formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
+                if(parts.length === 3) formatedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
             }
             document.getElementById('editMatchDate').value = formatedDate;
             editMatchModal.classList.add('show');
@@ -804,17 +783,40 @@ matchesContainer.addEventListener('click', async (e) => {
         newVideoUrlInput.value = "";
         videoModal.classList.add('show');
     }
+    
+    // --- NUEVO: MODIFICACIÓN CON SEGURIDAD PARA REEMPLAZAR/ELIMINAR ARCHIVOS ---
     if (btn.classList.contains('btn-replace-p2') || btn.closest('.btn-replace-p2')) {
         const targetBtn = btn.classList.contains('btn-replace-p2') ? btn : btn.closest('.btn-replace-p2');
-        await updateDoc(doc(db, "matches", targetBtn.getAttribute('data-id')), { p2Url: "" });
+        const matchId = targetBtn.getAttribute('data-id');
+        showCustomAlert("Desvincular P2", "¿Estás seguro de que querés eliminar el PDF P2 de este partido?", true, async () => {
+            try {
+                await updateDoc(doc(db, "matches", matchId), { p2Url: "" });
+            } catch (error) {
+                showCustomAlert("Error", "No se pudo desvincular el archivo.");
+            }
+        });
     }
     if (btn.classList.contains('btn-replace-scout') || btn.closest('.btn-replace-scout')) {
         const targetBtn = btn.classList.contains('btn-replace-scout') ? btn : btn.closest('.btn-replace-scout');
-        await updateDoc(doc(db, "matches", targetBtn.getAttribute('data-id')), { scoutUrl: "" });
+        const matchId = targetBtn.getAttribute('data-id');
+        showCustomAlert("Desvincular Scout", "¿Estás seguro de que querés eliminar el archivo Scout (.dvw) de este partido?", true, async () => {
+            try {
+                await updateDoc(doc(db, "matches", matchId), { scoutUrl: "" });
+            } catch (error) {
+                showCustomAlert("Error", "No se pudo desvincular el archivo.");
+            }
+        });
     }
     if (btn.classList.contains('btn-replace-video') || btn.closest('.btn-replace-video')) {
         const targetBtn = btn.classList.contains('btn-replace-video') ? btn : btn.closest('.btn-replace-video');
-        await updateDoc(doc(db, "matches", targetBtn.getAttribute('data-id')), { videoUrl: "" });
+        const matchId = targetBtn.getAttribute('data-id');
+        showCustomAlert("Desvincular Video", "¿Estás seguro de que querés eliminar el enlace de video de este partido?", true, async () => {
+            try {
+                await updateDoc(doc(db, "matches", matchId), { videoUrl: "" });
+            } catch (error) {
+                showCustomAlert("Error", "No se pudo desvincular el enlace.");
+            }
+        });
     }
 });
 
@@ -882,33 +884,24 @@ excelFileInput.addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = async function(event) {
         const data = new Uint8Array(event.target.result);
-        
-        // MAGIA ABSOLUTA: 'raw: false' ignora las fechas ocultas de Excel y lee TEXTO PURO.
         const rows = XLSX.utils.sheet_to_json(XLSX.read(data, { type: 'array' }).Sheets[XLSX.read(data, { type: 'array' }).SheetNames[0]], { header: 1, defval: "", raw: false }); 
-        
         if (rows.length < 5) return;
         const torneo = String(rows[0][1] || '').trim();
         const categoria = (String(rows[1][1] || '').trim().toLowerCase() === 'mayores') ? 'Mayores' : String(rows[1][1] || '').trim().toUpperCase();
-        
         try {
             for (let i = 4; i < rows.length; i++) {
                 if (!rows[i] || !rows[i][0] || !rows[i][3]) continue;
                 
                 let fecha = String(rows[i][0]).trim();
-                
-                // Sanitizador universal para asegurar formato DD-MM-YYYY
                 fecha = fecha.replace(/\//g, '-'); 
                 const p = fecha.split('-');
                 
                 if(p.length === 3) {
                     if(p[0].length === 4) { 
-                        // Si Excel vomitó YYYY-MM-DD
                         fecha = `${p[2].padStart(2, '0')}-${p[1].padStart(2, '0')}-${p[0]}`;
                     } else if (p[2].length === 2) {
-                        // Si vino DD-MM-YY (ej: 26)
                         fecha = `${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}-20${p[2]}`;
                     } else {
-                        // Formato perfecto DD-MM-YYYY
                         fecha = `${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}-${p[2]}`;
                     }
                 }
